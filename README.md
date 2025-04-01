@@ -4,20 +4,27 @@ This GitHub Action enables you to import secrets from Infisical—whether hosted
 
 ## Configuration
 
-- In order to use this, you will need to configure a [Machine Identity](https://infisical.com/docs/documentation/platform/identities/universal-auth) for your project.
-- This action supports two ways to authenticate your workflows with Infisical - universal auth and OIDC.
+- In order to use this, you will need to configure a [Machine Identity](https://infisical.com/docs/documentation/platform/identities/machine-identities) for your project.
+- This action supports two ways to authenticate your workflows with Infisical - [OIDC](https://infisical.com/docs/documentation/platform/identities/oidc-auth/github) and [universal auth](https://infisical.com/docs/documentation/platform/identities/universal-auth).
+
+### OIDC Auth
+
+- Configure a machine identity to use the "OIDC Auth" method. Set the bound audience, bound subject, and bound claims as needed for your setup. Refer to the setup guide [here](https://infisical.com/docs/documentation/platform/identities/oidc-auth/github).
+- Get the machine identity's ID.
+- Set `method` to oidc and configure the `identity-id` input parameter. Optionally, customize the JWT's aud field by setting the `oidc-audience` input parameter.
+- For debugging OIDC configuration issues, you can use GitHub's [actions-oidc-debugger](https://github.com/github/actions-oidc-debugger) tool. This tool helps you inspect the JWT claims and verify they match your configuration.
+- Add `id-token: write` to the permissions for your workflow:
+```
+permissions:
+  id-token: write
+  contents: read
+```
 
 ### Universal Auth
 
 - Configure a machine identity to have an auth method of "Universal Auth".
 - Get the machine identity's `client_id` and `client_secret` and store them as Github secrets (recommended) or environment variables.
 - Set the `client-id` and `client-secret` input parameters.
-
-### OIDC Auth
-
-- Configure a machine identity to use the "OIDC Auth" method. Set the bound audience, bound subject, and bound claims as needed for your setup.
-- Get the machine identity's ID.
-- Set `method` to oidc and configure the `identity-id` input parameter. Optionally, customize the JWT's aud field by setting the `oidc-audience` input parameter.
 
 ## Usage
 
@@ -28,12 +35,13 @@ With this action, you can use your Infisical secrets in two ways: as environment
 Secrets are injected as environment variables and can be referenced by subsequent workflow steps.
 
 ```yaml
-- uses: Infisical/secrets-action@v1.0.7
+- uses: Infisical/secrets-action@v1.0.9
   with:
-    client-id: ${{ secrets.MACHINE_IDENTITY_CLIENT_ID }} # Update this to your own Github references
-    client-secret: ${{ secrets.MACHINE_IDENTITY_CLIENT_SECRET }} # Update this to your own Github references
+    method: "oidc"
+    identity-id: "24be0d94-b43a-41c4-812c-1e8654d9ce1e"
+    domain: "https://app.infisical.com" # Update to the instance URL when using EU (https://eu.infisical.com), a dedicated instance, or a self-hosted instance
     env-slug: "dev"
-    project-slug: "example-project-r-i3x"
+    project-slug: "cli-integration-tests-9-edj"
 ```
 
 ### As a file
@@ -41,12 +49,13 @@ Secrets are injected as environment variables and can be referenced by subsequen
 Exports secrets to a file in your `GITHUB_WORKSPACE`, useful for applications that read from `.env` files.
 
 ```yaml
-- uses: Infisical/secrets-action@v1.0.7
+- uses: Infisical/secrets-action@v1.0.9
   with:
-    client-id: ${{ secrets.MACHINE_IDENTITY_CLIENT_ID }} # Update this to your own Github references
-    client-secret: ${{ secrets.MACHINE_IDENTITY_CLIENT_SECRET }} # Update this to your own Github references
+    method: "oidc"
+    identity-id: "24be0d94-b43a-41c4-812c-1e8654d9ce1e"
+    domain: "https://app.infisical.com" # Update to the instance URL when using EU (https://eu.infisical.com), a dedicated instance, or a self-hosted instance
     env-slug: "dev"
-    project-slug: "example-project-r-i3x"
+    project-slug: "cli-integration-tests-9-edj"
     export-type: "file"
     file-output-path: "/src/.env" # defaults to "/.env"
 ```
@@ -63,7 +72,7 @@ steps:
 
 ### `method`
 
-**Optional**. The authentication method to use. Defaults to `universal`
+**Optional**. The authentication method to use. Defaults to `universal`. Possible values are `universal` and `oidc`
 
 ### `client-id`
 
@@ -91,7 +100,7 @@ steps:
 
 ### `domain`
 
-**Optional**. Infisical URL. Defaults to https://app.infisical.com
+**Optional**. Infisical URL. Defaults to https://app.infisical.com. If you're using Infisical EU (https://eu.infisical.com) or a self-hosted/dedicated instance, you will need to set the appropriate value for this field.
 
 ### `export-type`
 
@@ -103,7 +112,7 @@ steps:
 
 ### `secret-path`
 
-**Optional**. Source secret path. Defaults to `/`
+**Optional**. Source secret path. Defaults to `/`.  Example: `/my-secret-path`.
 
 ### `include-imports`
 

@@ -19,7 +19,7 @@ export const UALogin = async ({ clientId, clientSecret, domain }) => {
     });
     return response.data.accessToken;
   } catch (err) {
-    core.error("Error:", err.message);
+    core.error(err.response?.data?.message || err.message);
     throw err;
   }
 };
@@ -44,7 +44,7 @@ export const oidcLogin = async ({ identityId, domain, oidcAudience }) => {
 
     return response.data.accessToken;
   } catch (err) {
-    core.error("Error:", err.message);
+    core.error(err.response?.data?.message || err.message);
     throw err;
   }
 };
@@ -83,19 +83,22 @@ export const getRawSecrets = async ({
     );
 
     // process imported secrets
-    const imports = response.data.imports;
-    for (let x = imports.length - 1; x >= 0; x--) {
-      const importedSecrets = imports[x].secrets;
-      importedSecrets.forEach((secret) => {
-        if (keyValueSecrets[secret.secretKey] === undefined) {
-          keyValueSecrets[secret.secretKey] = secret.secretValue;
-        }
-      });
+
+    if (response.data.imports) {
+      const imports = response.data.imports;
+      for (let i = imports.length - 1; i >= 0; i--) {
+        const importedSecrets = imports[i].secrets;
+        importedSecrets.forEach((secret) => {
+          if (keyValueSecrets[secret.secretKey] === undefined) {
+            keyValueSecrets[secret.secretKey] = secret.secretValue;
+          }
+        });
+      }
     }
 
     return keyValueSecrets;
   } catch (err) {
-    core.error("Error:", err.message);
+    core.error(err.response?.data?.message || err.message);
     throw err;
   }
 };
