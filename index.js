@@ -5,11 +5,7 @@ import fs from "fs/promises";
 const formatEnvValue = (val) => {
   if (typeof val !== "string") return val;
   if (val.includes("\n")) {
-    const escaped = val
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, "");
-    return `"${escaped}"`;
+    return val.replace(/\n/g, '\\n').replace(/\r/g, '');
   }
   return val;
 };
