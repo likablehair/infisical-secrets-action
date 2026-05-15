@@ -39,6 +39,10 @@ inputs:
     description: "The path to save the file when export-type is set to `file`"
     required: false
     default: "/.env"
+  export-subdirectories:
+    description: "If true, treats file-output-path as a directory and drops a .env file into for every subdirectory of the secret-path."
+    required: false
+    default: "false"
   secret-path:
     description: "Source path, example: `/my-secret-path`"
     required: false

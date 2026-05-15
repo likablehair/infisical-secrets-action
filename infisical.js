@@ -75,28 +75,35 @@ export const getRawSecrets = async ({
       },
     });
 
-    const keyValueSecrets = Object.fromEntries(
-      response.data.secrets.map((secret) => [
-        secret.secretKey,
-        secret.secretValue,
-      ])
-    );
+    const flatSecrets = {};
+    const groupedSecrets = {};
+
+    response.data.secrets.forEach((secret) => {
+      flatSecrets[secret.secretKey] = secret.secretValue;
+      
+      const path = secret.secretPath || secretPath;
+      if (!groupedSecrets[path]) groupedSecrets[path] = {};
+      groupedSecrets[path][secret.secretKey] = secret.secretValue;
+    });
 
     // process imported secrets
-
     if (response.data.imports) {
       const imports = response.data.imports;
       for (let i = imports.length - 1; i >= 0; i--) {
         const importedSecrets = imports[i].secrets;
         importedSecrets.forEach((secret) => {
-          if (keyValueSecrets[secret.secretKey] === undefined) {
-            keyValueSecrets[secret.secretKey] = secret.secretValue;
+          if (flatSecrets[secret.secretKey] === undefined) {
+            flatSecrets[secret.secretKey] = secret.secretValue;
+          }
+          if (!groupedSecrets[secretPath]) groupedSecrets[secretPath] = {};
+          if (groupedSecrets[secretPath][secret.secretKey] === undefined) {
+            groupedSecrets[secretPath][secret.secretKey] = secret.secretValue;
           }
         });
       }
     }
 
-    return keyValueSecrets;
+    return { flat: flatSecrets, grouped: groupedSecrets };
   } catch (err) {
     core.error(err.response?.data?.message || err.message);
     throw err;
