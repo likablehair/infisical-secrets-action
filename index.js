@@ -13,7 +13,7 @@ try {
   const projectSlug = core.getInput("project-slug");
   const secretPath = core.getInput("secret-path");
   const exportType = core.getInput("export-type");
-  const fileOutputPath = core.getInput("file-output-path");
+  const fileOutputDir = core.getInput("file-output-dir");
   const exportSubdirectories = core.getBooleanInput("export-subdirectories");
   const shouldIncludeImports = core.getBooleanInput("include-imports");
   const shouldRecurse = core.getBooleanInput("recursive");
@@ -75,12 +75,13 @@ try {
     });
     core.info("Injected secrets as environment variables");
   } else if (exportType === "file") {
-    const basePath = `${process.env.GITHUB_WORKSPACE}${fileOutputPath}`;
+    const cleanOutputDir = fileOutputDir.replace(/\/$/, "") || "/";
+    const basePath = `${process.env.GITHUB_WORKSPACE}${cleanOutputDir}`;
 
     try {
-      if (exportSubdirectories) {
-        await fs.mkdir(basePath, { recursive: true });
+      await fs.mkdir(basePath, { recursive: true });
 
+      if (exportSubdirectories) {
         for (const [currentPath, secrets] of Object.entries(groupedSecrets)) {
           if (Object.keys(secrets).length === 0) continue;
 
@@ -109,8 +110,10 @@ try {
 
       } else {
         const fileContent = Object.keys(keyValueSecrets).map((key) => `${key}=${keyValueSecrets[key]}`).join("\n");
-        core.info(`Exporting secrets to ${basePath}`);
-        await fs.writeFile(basePath, fileContent);
+        const targetPath = `${basePath}/.env`;
+        
+        core.info(`Exporting secrets to ${targetPath}`);
+        await fs.writeFile(targetPath, fileContent);
         core.info("Successfully exported secrets to file");
       }
     } catch (err) {
