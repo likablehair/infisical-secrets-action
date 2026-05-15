@@ -2,14 +2,6 @@ import * as core from "@actions/core";
 import { UALogin, getRawSecrets, oidcLogin } from "./infisical.js";
 import fs from "fs/promises";
 
-const formatEnvValue = (val) => {
-  if (typeof val !== "string") return val;
-  if (val.includes("\n")) {
-    return val.replace(/\n/g, '\\n').replace(/\r/g, '');
-  }
-  return val;
-};
-
 try {
   const method = core.getInput("method");
   const UAClientId = core.getInput("client-id");
@@ -109,9 +101,7 @@ try {
           }
 
           const targetPath = `${basePath}/${fileName}`;
-          const fileContent = Object.entries(secrets)
-            .map(([k, v]) => `${k}=${formatEnvValue(v)}`)
-            .join("\n");
+          const fileContent = Object.entries(secrets).map(([k, v]) => `${k}=${v}`).join("\n");
           
           core.info(`Exporting secrets from Infisical path '${currentPath}' to ${targetPath}`);
           await fs.writeFile(targetPath, fileContent);
@@ -119,9 +109,7 @@ try {
         core.info("Successfully exported folder-based secrets!");
 
       } else {
-        const fileContent = Object.entries(keyValueSecrets)
-          .map(([key, value]) => `${key}=${formatEnvValue(value)}`)
-          .join("\n");
+        const fileContent = Object.keys(keyValueSecrets).map((key) => `${key}=${keyValueSecrets[key]}`).join("\n");
           
         const targetPath = `${basePath}/.env`;
         
