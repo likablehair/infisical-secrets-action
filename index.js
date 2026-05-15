@@ -13,7 +13,8 @@ try {
   const projectSlug = core.getInput("project-slug");
   const secretPath = core.getInput("secret-path");
   const exportType = core.getInput("export-type");
-  const fileOutputPath = core.getInput("file-output-path");
+  const fileOutputDir = core.getInput("file-output-dir");
+  const exportSubdirectories = core.getBooleanInput("export-subdirectories");
   const shouldIncludeImports = core.getBooleanInput("include-imports");
   const shouldRecurse = core.getBooleanInput("recursive");
 
@@ -47,8 +48,8 @@ try {
       throw new Error("Invalid authentication method");
   }
 
-  // get secrets from Infisical using input params
-  const keyValueSecrets = await getRawSecrets({
+  // Fetch from Infisical (returns { flat, grouped })
+  const secretsData = await getRawSecrets({
     domain,
     envSlug,
     infisicalToken,
@@ -58,35 +59,67 @@ try {
     shouldRecurse,
   });
 
+  const keyValueSecrets = secretsData.flat;
+  const groupedSecrets = secretsData.grouped;
+
   core.debug(
     `Exporting the following envs", ${JSON.stringify(
       Object.keys(keyValueSecrets)
     )}`
   );
 
-  // export fetched secrets
   if (exportType === "env") {
-    // Write the secrets to action ENV
     Object.entries(keyValueSecrets).forEach(([key, value]) => {
       core.setSecret(value);
       core.exportVariable(key, value);
     });
     core.info("Injected secrets as environment variables");
   } else if (exportType === "file") {
-    // Write the secrets to a file at the specified path
-    const fileContent = Object.keys(keyValueSecrets)
-      .map((key) => `${key}=${keyValueSecrets[key]}`)
-      .join("\n");
+    const cleanOutputDir = fileOutputDir.replace(/\/$/, "") || "/";
+    const basePath = `${process.env.GITHUB_WORKSPACE}${cleanOutputDir}`;
 
     try {
-      const filePath = `${process.env.GITHUB_WORKSPACE}${fileOutputPath}`;
-      core.info(`Exporting secrets to ${filePath}`);
-      await fs.writeFile(filePath, fileContent);
+      await fs.mkdir(basePath, { recursive: true });
+
+      if (exportSubdirectories) {
+        for (const [currentPath, secrets] of Object.entries(groupedSecrets)) {
+          if (Object.keys(secrets).length === 0) continue;
+
+          let fileName = "";
+          const cleanSecretPath = secretPath.replace(/\/$/, "") || "/";
+          const cleanCurrentPath = currentPath.replace(/\/$/, "") || "/";
+
+          if (cleanCurrentPath === cleanSecretPath) {
+            fileName = ".env";
+          } else {
+            let subfolder = cleanCurrentPath;
+            if (cleanSecretPath !== "/") {
+              subfolder = subfolder.replace(cleanSecretPath, "");
+            }
+            subfolder = subfolder.replace(/^\//, "").replace(/\//g, "-");
+            fileName = `${subfolder}.env`;
+          }
+
+          const targetPath = `${basePath}/${fileName}`;
+          const fileContent = Object.entries(secrets).map(([k, v]) => `${k}=${v}`).join("\n");
+          
+          core.info(`Exporting secrets from Infisical path '${currentPath}' to ${targetPath}`);
+          await fs.writeFile(targetPath, fileContent);
+        }
+        core.info("Successfully exported folder-based secrets!");
+
+      } else {
+        const fileContent = Object.keys(keyValueSecrets).map((key) => `${key}=${keyValueSecrets[key]}`).join("\n");
+        const targetPath = `${basePath}/.env`;
+        
+        core.info(`Exporting secrets to ${targetPath}`);
+        await fs.writeFile(targetPath, fileContent);
+        core.info("Successfully exported secrets to file");
+      }
     } catch (err) {
-      core.error(`Error writing file: ${err.message}`);
+      core.error(`Error writing file(s): ${err.message}`);
       throw err;
     }
-    core.info("Successfully exported secrets to file");
   }
 } catch (error) {
   core.setFailed(error.message);
