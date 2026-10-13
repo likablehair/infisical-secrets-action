@@ -1,123 +1,168 @@
 # Infisical Secrets Action
 
-This GitHub Action enables you to import secrets from Infisical—whether hosted in the cloud or self-hosted—directly into your GitHub workflows.
+Fetch secrets from [Infisical](https://infisical.com) (cloud or self-hosted) and use them in your workflows, either as environment variables or as `.env` files.
 
-## Configuration
+This repository is a fork of [Infisical/secrets-action](https://github.com/Infisical/secrets-action). On top of upstream, it adds:
 
-- In order to use this, you will need to configure a [Machine Identity](https://infisical.com/docs/documentation/platform/identities/machine-identities) for your project.
-- This action supports two ways to authenticate your workflows with Infisical - [OIDC](https://infisical.com/docs/documentation/platform/identities/oidc-auth/github) and [universal auth](https://infisical.com/docs/documentation/platform/identities/universal-auth).
+- `file-output-dir`, which replaces upstream's `file-output-path`. You choose the output **directory**, and the file is always named `.env`.
+- `export-subdirectories`, which writes one `.env` file per Infisical folder (see [Exporting subfolders as separate files](#exporting-subfolders-as-separate-files)).
+
+## Quick start
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # only needed for OIDC auth
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: https://gitea.likablehair.it/Likablehair/infisical-secrets-action@master
+        with:
+          method: oidc
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          domain: https://app.infisical.com
+          project-slug: my-project
+          env-slug: dev
+
+      - run: ./deploy.sh # secrets are now available as environment variables
+```
+
+> If your runner resolves actions from this Gitea instance by default, you can use the short form `Likablehair/infisical-secrets-action@master`.
+
+## Authentication
+
+Both methods need a [Machine Identity](https://infisical.com/docs/documentation/platform/identities/machine-identities) with access to the project.
+
+### Universal Auth (default)
+
+1. Set the machine identity's auth method to **Universal Auth**.
+2. Store its client ID and client secret as repository secrets.
+3. Pass them to the action:
+
+```yaml
+- uses: https://gitea.likablehair.it/Likablehair/infisical-secrets-action@master
+  with:
+    method: universal
+    client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+    client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+    project-slug: my-project
+    env-slug: dev
+```
 
 ### OIDC Auth
 
-- Configure a machine identity to use the "OIDC Auth" method. Set the bound audience, bound subject, and bound claims as needed for your setup. Refer to the setup guide [here](https://infisical.com/docs/documentation/platform/identities/oidc-auth/github).
-- Get the machine identity's ID.
-- Set `method` to oidc and configure the `identity-id` input parameter. Optionally, customize the JWT's aud field by setting the `oidc-audience` input parameter.
-- For debugging OIDC configuration issues, you can use GitHub's [actions-oidc-debugger](https://github.com/github/actions-oidc-debugger) tool. This tool helps you inspect the JWT claims and verify they match your configuration.
-- Add `id-token: write` to the permissions for your workflow:
-```
+1. Set the machine identity's auth method to **OIDC Auth**, and configure the bound audience, subject and claims for your setup ([guide](https://infisical.com/docs/documentation/platform/identities/oidc-auth/github)).
+2. Set `method: oidc` and `identity-id` to the machine identity's ID. You can override the token's `aud` claim with `oidc-audience`.
+3. Grant the job permission to request an ID token:
+
+```yaml
 permissions:
   id-token: write
   contents: read
 ```
 
-### Universal Auth
-
-- Configure a machine identity to have an auth method of "Universal Auth".
-- Get the machine identity's `client_id` and `client_secret` and store them as Github secrets (recommended) or environment variables.
-- Set the `client-id` and `client-secret` input parameters.
+To debug claim mismatches, use [actions-oidc-debugger](https://github.com/github/actions-oidc-debugger) to inspect the token your workflow receives.
 
 ## Usage
 
-With this action, you can use your Infisical secrets in two ways: as environment variables or as a file.
+### As environment variables (default)
 
-### As environment variables
-
-Secrets are injected as environment variables and can be referenced by subsequent workflow steps.
+Each secret is exported as an environment variable for all later steps in the job. Values are masked in the logs.
 
 ```yaml
-- uses: Infisical/secrets-action@v1.0.9
+- uses: https://gitea.likablehair.it/Likablehair/infisical-secrets-action@master
   with:
-    method: "oidc"
-    identity-id: "24be0d94-b43a-41c4-812c-1e8654d9ce1e"
-    domain: "https://app.infisical.com" # Update to the instance URL when using EU (https://eu.infisical.com), a dedicated instance, or a self-hosted instance
-    env-slug: "dev"
-    project-slug: "cli-integration-tests-9-edj"
+    client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+    client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+    project-slug: my-project
+    env-slug: prod
+    secret-path: /backend
 ```
 
-### As a file
+### As a `.env` file
 
-Exports secrets to a file in your `GITHUB_WORKSPACE`, useful for applications that read from `.env` files.
+Set `export-type: file` to write the secrets to `<file-output-dir>/.env`. The path is relative to `GITHUB_WORKSPACE`, and missing directories are created for you. Run `actions/checkout` first, so the checkout doesn't wipe the file.
 
 ```yaml
-- uses: Infisical/secrets-action@v1.0.9
+- uses: actions/checkout@v4
+
+- uses: https://gitea.likablehair.it/Likablehair/infisical-secrets-action@master
   with:
-    method: "oidc"
-    identity-id: "24be0d94-b43a-41c4-812c-1e8654d9ce1e"
-    domain: "https://app.infisical.com" # Update to the instance URL when using EU (https://eu.infisical.com), a dedicated instance, or a self-hosted instance
-    env-slug: "dev"
-    project-slug: "cli-integration-tests-9-edj"
-    export-type: "file"
-    file-output-path: "/src/.env" # defaults to "/.env"
+    client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+    client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+    project-slug: my-project
+    env-slug: prod
+    export-type: file
+    file-output-dir: /src # writes $GITHUB_WORKSPACE/src/.env
 ```
 
-**Note**: Make sure to configure an `actions/checkout` step before using this action in file export mode
+### Exporting subfolders as separate files
+
+With `export-type: file`, `recursive: true` and `export-subdirectories: true`, the action writes one file per Infisical folder instead of a single combined file.
 
 ```yaml
-steps:
-  - name: Checkout code
-    uses: actions/checkout@v4
+- uses: https://gitea.likablehair.it/Likablehair/infisical-secrets-action@master
+  with:
+    client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+    client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+    project-slug: my-project
+    env-slug: prod
+    secret-path: /apps
+    recursive: true
+    export-type: file
+    export-subdirectories: true
+    file-output-dir: /config
 ```
+
+Given this Infisical layout, the action writes these files:
+
+| Infisical folder  | Output file                            |
+| ----------------- | -------------------------------------- |
+| `/apps`           | `config/.env`                          |
+| `/apps/api`       | `config/api.env`                       |
+| `/apps/api/worker`| `config/api-worker.env`                |
+| `/apps/web`       | `config/web.env`                       |
+
+How files are named and filled:
+
+- The folder in `secret-path` itself goes to `.env`.
+- Subfolders are named by their path relative to `secret-path`, with `/` replaced by `-`.
+- Folders with no secrets are skipped.
+- Imported secrets go into the root `.env` file.
 
 ## Inputs
 
-### `method`
+| Input                   | Required | Default                     | Description |
+| ----------------------- | :------: | --------------------------- | ----------- |
+| `project-slug`          | yes      |                             | Slug of the Infisical project. |
+| `env-slug`              | yes      |                             | Slug of the environment, such as `dev` or `prod`. |
+| `method`                | no       | `universal`                 | Auth method: `universal` or `oidc`. |
+| `client-id`             | no       |                             | Machine identity client ID. Required for `universal`. |
+| `client-secret`         | no       |                             | Machine identity client secret. Required for `universal`. |
+| `identity-id`           | no       |                             | Machine identity ID. Required for `oidc`. |
+| `oidc-audience`         | no       |                             | Custom `aud` claim for the OIDC ID token. |
+| `domain`                | no       | `https://app.infisical.com` | Infisical instance URL. Set it for EU (`https://eu.infisical.com`), dedicated or self-hosted instances. Don't add a trailing slash. |
+| `secret-path`           | no       | `/`                         | Infisical folder to read from, such as `/my-secret-path`. |
+| `recursive`             | no       | `false`                     | Also fetch secrets from all subfolders of `secret-path`. |
+| `include-imports`       | no       | `true`                      | Include secrets imported into the folder. |
+| `export-type`           | no       | `env`                       | `env` exports environment variables. `file` writes `.env` file(s). |
+| `file-output-dir`       | no       | `/`                         | With `export-type: file`, the output directory relative to `GITHUB_WORKSPACE`. |
+| `export-subdirectories` | no       | `false`                     | With `export-type: file`, write one `.env` file per Infisical folder. Use it with `recursive: true`. |
 
-**Optional**. The authentication method to use. Defaults to `universal`. Possible values are `universal` and `oidc`
+## Behavior notes
 
-### `client-id`
+- **Secret references** such as `${OTHER_SECRET}` are expanded by Infisical before export.
+- **Duplicate keys:** when `recursive` is on and the same key exists in several folders, environment variables and the single `.env` file keep only one value, whichever folder Infisical returns last. Use `export-subdirectories` to keep them apart.
+- **Imports never override:** an imported secret is skipped if the folder already defines a secret with the same key.
+- **File format:** each line is written as `KEY=value`, with no quoting or escaping. Values that contain newlines (for example PEM keys) span several lines, and some `.env` parsers will misread them.
 
-**Optional**. Machine Identity client ID
+## Development
 
-### `client-secret`
+The action runs on Node 20 (`.nvmrc`). `node_modules` is committed, because the runner executes `index.js` directly with no build step. After you change dependencies, run `npm install` and commit the updated `node_modules`.
 
-**Optional**. Machine Identity secret key
+## License
 
-### `identity-id`
-
-**Optional**. Machine Identity ID
-
-### `oidc-audience`
-
-**Optional**. Custom aud claim for the signed Github ID token
-
-### `project-slug`
-
-**Required**. Source project slug
-
-### `env-slug`
-
-**Required**. Source environment slug
-
-### `domain`
-
-**Optional**. Infisical URL. Defaults to https://app.infisical.com. If you're using Infisical EU (https://eu.infisical.com) or a self-hosted/dedicated instance, you will need to set the appropriate value for this field.
-
-### `export-type`
-
-**Optional**. If set to `env`, it will set the fetched secrets as environment variables for subsequent steps of a workflow. If set to `file`, it will export the secrets in a .env file in the defined file-output-path. Defaults to `env`
-
-### `file-output-path`
-
-**Optional**. The path to save the file when export-type is set to `file`. Defaults to `/.env`
-
-### `secret-path`
-
-**Optional**. Source secret path. Defaults to `/`.  Example: `/my-secret-path`.
-
-### `include-imports`
-
-**Optional**. If set to `true`, it will include imported secrets. Defaults to `true`
-
-### `recursive`
-
-**Optional**. If set to `true`, it will fetch all secrets from the specified base path and all of its subdirectories. Defaults to `false`
+See [LICENSE](LICENSE).
